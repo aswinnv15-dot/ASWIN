@@ -1,7 +1,9 @@
 import numpy as np
+import os
 import matplotlib
 matplotlib.use("Agg")          # remove this line in PyCharm if you want the plot window
 import matplotlib.pyplot as plt
+from openpyxl import Workbook, load_workbook
 
 # ---------------- inputs (your original values) ----------------
 Ta = 30             # surrounding temperature, deg C
@@ -13,6 +15,7 @@ cp = 500            # specific heat, J/kg.K
 side = 0.005        # cube side, m
 dt = 0.1            # time step, s (smaller than 1 s: the pearlite nose is ~1 s)
 TotalT = 600        # total time, s
+excel_file = "cooling_results.xlsx"   # same file is reused for every dt
 
 # ---------------- eutectoid steel (~Fe-0.8C) transformation data ----------------
 Ae1 = 727.0         # eutectoid temperature, deg C
@@ -72,6 +75,7 @@ Bi = h * (v / A) / k
 print(f"Biot number = {Bi:.5f}  (lumped model is valid for Bi < 0.1)")
 
 # ---------------- heat balance + phase transformation loop ----------------
+Ts0 = Ts                    # remember initial temperature for the Excel file
 xP = xB = xM = 0.0          # actual volume fractions
 yP = yB = 0.0               # Avrami (extended) variables used for additivity
 
@@ -119,6 +123,25 @@ step = int(round(60 / dt))
 for i in range(step - 1, n_steps, step):
     print(f"t = {time[i]:6.1f} s   T = {Temp[i]:8.2f} C   "
           f"P = {fP[i]:.3f}  B = {fB[i]:.3f}  M = {fM[i]:.3f}")
+
+# ---------------- save time and temperature to Excel ----------------
+# One sheet per dt inside the same workbook. Running again with a new dt adds a
+# new sheet; running again with an old dt replaces that dt's sheet.
+sheet_name = f"dt_{dt:g}"
+if os.path.exists(excel_file):
+    wb = load_workbook(excel_file)
+else:
+    wb = Workbook()
+    wb.remove(wb.active)
+if sheet_name in wb.sheetnames:
+    del wb[sheet_name]
+ws = wb.create_sheet(sheet_name)
+ws.append(["Time (s)", "Temperature (C)"])
+ws.append([0, Ts0])                     # initial condition
+for t_i, T_i in zip(time, Temp):
+    ws.append([round(float(t_i), 6), float(T_i)])
+wb.save(excel_file)
+print(f"Saved {n_steps + 1} rows to '{excel_file}', sheet '{sheet_name}'")
 
 # ---------------- plot ----------------
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 8), sharex=True)
